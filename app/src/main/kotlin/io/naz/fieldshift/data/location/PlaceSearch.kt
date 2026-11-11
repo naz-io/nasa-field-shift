@@ -4,6 +4,7 @@ import android.content.Context
 import android.location.Address
 import android.location.Geocoder
 import android.os.Build
+import androidx.annotation.RequiresApi
 import io.naz.fieldshift.domain.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -72,6 +73,8 @@ class GeocoderPlaceSearch(context: Context) : PlaceSearch {
       }
     }
 
+  // Only reached from inside the SDK_INT >= 33 branches above; the annotation tells lint that.
+  @RequiresApi(Build.VERSION_CODES.TIRAMISU)
   private fun listener(cont: kotlinx.coroutines.CancellableContinuation<List<Address>>) =
     object : Geocoder.GeocodeListener {
       override fun onGeocode(addresses: MutableList<Address>) {

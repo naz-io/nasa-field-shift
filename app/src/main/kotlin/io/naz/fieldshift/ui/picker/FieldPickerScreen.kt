@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -101,11 +102,21 @@ fun FieldPickerScreen(
       if (grants.values.any { it }) viewModel.useMyLocation() else viewModel.onLocationPermissionDenied()
     }
 
-  Scaffold(modifier = modifier, snackbarHost = { SnackbarHost(snackbar) }) { _ ->
+  // The map is meant to draw edge to edge, under the status and navigation bars, so the Scaffold
+  // gets no window insets (its padding is then just zero). The search bar and bottom card pad
+  // themselves with statusBarsPadding()/navigationBarsPadding().
+  Scaffold(
+    modifier = modifier,
+    snackbarHost = { SnackbarHost(snackbar) },
+    contentWindowInsets = WindowInsets(0),
+  ) { padding ->
     if (!state.ready) {
-      Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+      Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+      }
     } else {
       PickerContent(
+        modifier = Modifier.padding(padding),
         state = state,
         onCameraIdle = viewModel::onCameraIdle,
         onCameraRequestHandled = viewModel::cameraRequestHandled,
@@ -128,6 +139,7 @@ fun FieldPickerScreen(
 @Composable
 private fun PickerContent(
   state: FieldPickerUiState,
+  modifier: Modifier = Modifier,
   onCameraIdle: (GeoPoint) -> Unit,
   onCameraRequestHandled: (Long) -> Unit,
   onQueryChange: (String) -> Unit,
@@ -158,7 +170,7 @@ private fun PickerContent(
     onCameraRequestHandled(request.id)
   }
 
-  Box(Modifier.fillMaxSize()) {
+  Box(modifier.fillMaxSize()) {
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraState,
