@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+      "A newer version of Gradle/AGP is available" is a reminder, not a code problem, and it
+      changes every few weeks. Upgrades are done deliberately (as separate commits), not to
+      silence a check, so this one notice is turned off. Everything else stays on.
+    -->
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+</lint>
