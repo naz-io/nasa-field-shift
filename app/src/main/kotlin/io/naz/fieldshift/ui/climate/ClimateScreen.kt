@@ -32,6 +32,9 @@ import io.naz.fieldshift.R
 import io.naz.fieldshift.appContainer
 import io.naz.fieldshift.domain.ClimateSummary
 import io.naz.fieldshift.domain.FieldLocation
+import io.naz.fieldshift.domain.FrostStats
+import io.naz.fieldshift.domain.MonthRange
+import io.naz.fieldshift.domain.PrecipitationStats
 import io.naz.fieldshift.domain.GeoPoint
 import io.naz.fieldshift.ui.theme.FieldShiftTheme
 import java.time.Month
@@ -121,26 +124,34 @@ internal fun ClimateScreen(
 
 @Composable
 private fun SummaryContent(summary: ClimateSummary) {
+  val precip = summary.precipitation
   StatCard(
     title = "Precipitation",
     rows =
-      listOf(
-        "Average per year" to "${summary.avgAnnualPrecipMm.roundToInt()} mm",
-        "Growing season (${summary.growingSeasonFirstMonth.short()}–${summary.growingSeasonLastMonth.short()})" to
-          (summary.avgGrowingSeasonPrecipMm?.let { "${it.roundToInt()} mm" } ?: "—"),
-      ),
+      if (precip == null) listOf("Not enough data" to "—")
+      else
+        listOf(
+          "Average per year" to "${precip.avgAnnualMm.roundToInt()} mm",
+          "Growing season (${precip.growingSeason.start.short()}–${precip.growingSeason.endInclusive.short()})" to
+            (precip.avgGrowingSeasonMm?.let { "${it.roundToInt()} mm" } ?: "—"),
+        ),
   )
   StatCard(
     title = "Frost",
     rows =
-      listOf(
-        "Average last spring frost" to summary.avgLastSpringFrost.display(),
-        "Average first fall frost" to summary.avgFirstFallFrost.display(),
-        "Frost-free season" to (summary.avgFrostFreeDays?.let { "$it days" } ?: "—"),
-      ),
+      when (val frost = summary.frost) {
+        is FrostStats.InsufficientData -> listOf("Not enough data" to "—")
+        is FrostStats.NoFrost -> listOf("No frost recorded" to "${frost.seasonsAnalysed} seasons")
+        is FrostStats.Frost ->
+          listOf(
+            "Average last spring frost" to frost.avgLastSpringFrost.display(),
+            "Average first fall frost" to frost.avgFirstFallFrost.display(),
+            "Frost-free season" to (frost.avgFrostFreeDays?.let { "$it days" } ?: "—"),
+          )
+      },
   )
   Text(
-    "Averages for ${summary.firstYear}–${summary.lastYear} from NASA POWER (MERRA-2). " +
+    "Averages from NASA POWER (MERRA-2). " +
       "Precipitation includes snow. Values are for a grid cell about 50 km wide, " +
       "so your field may be frostier or drier – check local station records.",
     style = MaterialTheme.typography.bodySmall,
@@ -165,7 +176,7 @@ private fun StatCard(title: String, rows: List<Pair<String, String>>) {
 
 private val MONTH_DAY = DateTimeFormatter.ofPattern("MMM d")
 
-private fun MonthDay?.display(): String = this?.format(MONTH_DAY) ?: "None"
+private fun MonthDay?.display(): String = this?.format(MONTH_DAY) ?: "—"
 
 private fun Month.short(): String = getDisplayName(TextStyle.SHORT, Locale.getDefault())
 
@@ -178,15 +189,24 @@ private fun ClimateScreenPreview() {
       uiState =
         ClimateUiState.Success(
           ClimateSummary(
-            firstYear = 2020,
-            lastYear = 2024,
-            avgAnnualPrecipMm = 850.0,
-            avgGrowingSeasonPrecipMm = 390.0,
-            growingSeasonFirstMonth = Month.MAY,
-            growingSeasonLastMonth = Month.SEPTEMBER,
-            avgLastSpringFrost = MonthDay.of(4, 28),
-            avgFirstFallFrost = MonthDay.of(10, 20),
-            avgFrostFreeDays = 174,
+            precipitation =
+              PrecipitationStats(
+                avgAnnualMm = 850.0,
+                yearsAnalysed = 10,
+                firstYear = 2016,
+                lastYear = 2025,
+                coverage = 0.999,
+                growingSeason = MonthRange(Month.MAY, Month.SEPTEMBER),
+                avgGrowingSeasonMm = 390.0,
+              ),
+            frost =
+              FrostStats.Frost(
+                avgLastSpringFrost = MonthDay.of(4, 28),
+                avgFirstFallFrost = MonthDay.of(10, 20),
+                avgFrostFreeDays = 174,
+                seasonsWithFrost = 10,
+                seasonsAnalysed = 10,
+              ),
           )
         ),
       onRetry = {},

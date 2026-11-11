@@ -47,9 +47,7 @@ class ClimateViewModel(
         try {
           val days =
             repository.getDailyWeather(location.latitude, location.longitude, START_YEAR, END_YEAR)
-          val summary = ClimateCalculator.summarize(days, location.latitude)
-          if (summary != null) ClimateUiState.Success(summary)
-          else ClimateUiState.Error("NASA POWER returned no complete years of data.")
+          ClimateUiState.Success(ClimateCalculator.summarize(days, location.latitude))
         } catch (e: CancellationException) {
           throw e // never swallow cancellation – it's how coroutines stop
         } catch (e: Exception) {

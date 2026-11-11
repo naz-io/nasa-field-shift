@@ -1,5 +1,8 @@
 package io.naz.fieldshift.domain
 
+import io.naz.fieldshift.domain.FrostStats.Frost
+import io.naz.fieldshift.domain.FrostStats.InsufficientData
+import io.naz.fieldshift.domain.FrostStats.NoFrost
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -29,7 +32,11 @@ class ClimateCalculatorTest {
     }
   }
 
-  /** A full synthetic southern year: winter frost from [firstFallFrost] to [lastSpringFrost]. */
+  /** Several identical northern years. */
+  private fun years(range: IntRange, precipPerDay: Double? = 1.0) =
+    range.flatMap { year(it, precipPerDay = precipPerDay) }
+
+  /** A full synthetic southern calendar year: winter frost from [firstFallFrost] to [lastSpringFrost]. */
   private fun southernYear(
     year: Int,
     firstFallFrost: MonthDay = MonthDay.of(5, 20),
@@ -43,72 +50,126 @@ class ClimateCalculatorTest {
   private fun daysOf(year: Int) =
     generateSequence(LocalDate.of(year, 1, 1)) { it.plusDays(1) }.takeWhile { it.year == year }.toList()
 
+  /** Removes rain and/or minimum temperature on the first [count] days of every year. */
+  private fun List<DailyWeather>.withGaps(count: Int, rain: Boolean = false, temp: Boolean = false) = map {
+    if (it.date.dayOfYear > count) it
+    else it.copy(precipMm = if (rain) null else it.precipMm, tMinC = if (temp) null else it.tMinC)
+  }
+
+  // --- Not enough data -------------------------------------------------------------------------
+
   @Test
-  fun `no complete year returns null`() {
-    assertNull(ClimateCalculator.summarize(emptyList(), NORTH))
-    assertNull(ClimateCalculator.summarize(year(2021).take(100), NORTH))
+  fun `no data at all reports not enough data, never zero`() {
+    val summary = ClimateCalculator.summarize(emptyList(), NORTH)
+    assertNull(summary.precipitation)
+    assertEquals(InsufficientData(0), summary.frost)
   }
 
   @Test
-  fun `precipitation is averaged over yearly totals`() {
-    val days = year(2021, precipPerDay = 1.0) + year(2022, precipPerDay = 3.0)
-    val summary = ClimateCalculator.summarize(days, NORTH)!!
-    assertEquals(730.0, summary.avgAnnualPrecipMm, 0.001) // (365 + 1095) / 2
-    assertEquals(306.0, summary.avgGrowingSeasonPrecipMm!!, 0.001) // 153 days May–Sep * 2 mm
-    assertEquals(Month.MAY, summary.growingSeasonFirstMonth)
-    assertEquals(Month.SEPTEMBER, summary.growingSeasonLastMonth)
-    assertEquals(2021, summary.firstYear)
-    assertEquals(2022, summary.lastYear)
+  fun `fewer than three usable years reports not enough data`() {
+    val summary = ClimateCalculator.summarize(years(2021..2022), NORTH)
+    assertNull(summary.precipitation)
+    assertEquals(InsufficientData(2), summary.frost)
   }
+
+  @Test
+  fun `years with no rain measurements give not enough data instead of 0 mm`() {
+    val summary = ClimateCalculator.summarize(years(2021..2023, precipPerDay = null), NORTH)
+    assertNull(summary.precipitation)
+    assertTrue(summary.frost is Frost) // temperature data is fine, so frost is still reported
+  }
+
+  @Test
+  fun `years with no temperature measurements give insufficient frost data instead of no frost`() {
+    val summary = ClimateCalculator.summarize(years(2021..2023).map { it.copy(tMinC = null) }, NORTH)
+    assertEquals(InsufficientData(0), summary.frost)
+    assertEquals(365.0, summary.precipitation!!.avgAnnualMm, 0.001) // rain is still fine
+  }
+
+  @Test
+  fun `a year needs 95 percent coverage per measurement`() {
+    // 18 missing days = 95.07% coverage (kept); 19 missing = 94.79% (dropped).
+    val kept = ClimateCalculator.summarize(years(2021..2023).withGaps(18, rain = true), NORTH)
+    assertEquals(3, kept.precipitation!!.yearsAnalysed)
+
+    val dropped = ClimateCalculator.summarize(years(2021..2023).withGaps(19, rain = true), NORTH)
+    assertNull(dropped.precipitation)
+    assertTrue(dropped.frost is Frost) // only rain was missing
+  }
+
+  @Test
+  fun `partial years are not used`() {
+    val summary = ClimateCalculator.summarize(years(2021..2023) + year(2024).take(50), NORTH)
+    assertEquals(2023, summary.precipitation!!.lastYear)
+    assertEquals(3, (summary.frost as Frost).seasonsAnalysed)
+  }
+
+  // --- Precipitation ----------------------------------------------------------------------------
+
+  @Test
+  fun `precipitation is averaged over yearly totals`() {
+    val days = year(2021, precipPerDay = 1.0) + year(2022, precipPerDay = 3.0) + year(2023, precipPerDay = 2.0)
+    val precip = ClimateCalculator.summarize(days, NORTH).precipitation!!
+    assertEquals(730.0, precip.avgAnnualMm, 0.001) // (365 + 1095 + 730) / 3
+    assertEquals(306.0, precip.avgGrowingSeasonMm!!, 0.001) // 153 days May–Sep * 2 mm
+    assertEquals(MonthRange(Month.MAY, Month.SEPTEMBER), precip.growingSeason)
+    assertEquals(2021, precip.firstYear)
+    assertEquals(2023, precip.lastYear)
+    assertEquals(1.0, precip.coverage, 0.0001)
+  }
+
+  @Test
+  fun `small gaps are filled with the daily mean instead of counted as dry`() {
+    val precip = ClimateCalculator.summarize(years(2021..2023).withGaps(12, rain = true), NORTH).precipitation!!
+    assertEquals(365.0, precip.avgAnnualMm, 0.001) // not 353
+    assertEquals(353.0 / 365, precip.coverage, 0.0001)
+  }
+
+  // --- Frost ------------------------------------------------------------------------------------
 
   @Test
   fun `frost dates are averaged across years`() {
     val days =
       year(2021, MonthDay.of(4, 20), MonthDay.of(10, 5)) +
-        year(2022, MonthDay.of(4, 30), MonthDay.of(10, 15))
-    val summary = ClimateCalculator.summarize(days, NORTH)!!
-    assertEquals(MonthDay.of(4, 25), summary.avgLastSpringFrost)
-    assertEquals(MonthDay.of(10, 10), summary.avgFirstFallFrost)
-    assertEquals(167, summary.avgFrostFreeDays) // Apr 26 .. Oct 9
+        year(2022, MonthDay.of(4, 30), MonthDay.of(10, 15)) +
+        year(2023, MonthDay.of(4, 25), MonthDay.of(10, 10))
+    val frost = ClimateCalculator.summarize(days, NORTH).frost as Frost
+    assertEquals(MonthDay.of(4, 25), frost.avgLastSpringFrost)
+    assertEquals(MonthDay.of(10, 10), frost.avgFirstFallFrost)
+    assertEquals(167, frost.avgFrostFreeDays) // Apr 26 .. Oct 9
+    assertEquals(3, frost.seasonsWithFrost)
+    assertEquals(3, frost.seasonsAnalysed)
   }
 
   @Test
   fun `a temperature of exactly zero counts as frost`() {
     val days =
-      year(2021, lastSpringFrost = null, firstFallFrost = null).map {
-        if (it.date == LocalDate.of(2021, 5, 12)) it.copy(tMinC = 0.0) else it
+      (2021..2023).flatMap { y ->
+        year(y, lastSpringFrost = null, firstFallFrost = null).map {
+          if (it.date == LocalDate.of(y, 5, 12)) it.copy(tMinC = 0.0) else it
+        }
       }
-    assertEquals(MonthDay.of(5, 12), ClimateCalculator.summarize(days, NORTH)!!.avgLastSpringFrost)
+    assertEquals(MonthDay.of(5, 12), (ClimateCalculator.summarize(days, NORTH).frost as Frost).avgLastSpringFrost)
   }
 
   @Test
-  fun `frost-free climate has no frost dates`() {
-    val summary =
-      ClimateCalculator.summarize(year(2021, lastSpringFrost = null, firstFallFrost = null), NORTH)!!
-    assertNull(summary.avgLastSpringFrost)
-    assertNull(summary.avgFirstFallFrost)
-    assertNull(summary.avgFrostFreeDays)
+  fun `enough data and no frost at all is reported as no frost`() {
+    val days = (2021..2023).flatMap { year(it, lastSpringFrost = null, firstFallFrost = null) }
+    assertEquals(NoFrost(3), ClimateCalculator.summarize(days, NORTH).frost)
   }
 
-  @Test
-  fun `missing values are skipped and partial years ignored`() {
-    val withGaps =
-      year(2021).map { if (it.date.dayOfMonth == 1) it.copy(tMinC = null, precipMm = null) else it }
-    val summary = ClimateCalculator.summarize(withGaps + year(2022).take(50), NORTH)!!
-    assertEquals(2021, summary.lastYear)
-    assertEquals(353.0, summary.avgAnnualPrecipMm, 0.001) // 365 - 12 missing days
-    assertEquals(MonthDay.of(4, 30), summary.avgLastSpringFrost)
-  }
+  // --- Southern hemisphere ----------------------------------------------------------------------
 
   @Test
   fun `southern hemisphere frost season runs July to June`() {
-    // Calendar 2020–2022 contains two complete Jul–Jun seasons: 2020/21 and 2021/22.
-    val days = southernYear(2020) + southernYear(2021) + southernYear(2022)
-    val summary = ClimateCalculator.summarize(days, SOUTH)!!
+    // Calendar 2020–2023 contains three complete Jul–Jun seasons: 2020/21, 2021/22, 2022/23.
+    val days = (2020..2023).flatMap { southernYear(it) }
+    val frost = ClimateCalculator.summarize(days, SOUTH).frost as Frost
 
-    assertEquals(MonthDay.of(9, 25), summary.avgLastSpringFrost)
-    assertEquals(MonthDay.of(5, 20), summary.avgFirstFallFrost)
-    assertEquals(236, summary.avgFrostFreeDays) // Sep 26 .. May 19, across New Year
+    assertEquals(MonthDay.of(9, 25), frost.avgLastSpringFrost)
+    assertEquals(MonthDay.of(5, 20), frost.avgFirstFallFrost)
+    assertEquals(236, frost.avgFrostFreeDays) // Sep 26 .. May 19, across New Year
+    assertEquals(3, frost.seasonsAnalysed)
   }
 
   @Test
@@ -116,25 +177,24 @@ class ClimateCalculatorTest {
     val days =
       southernYear(2020, lastSpringFrost = MonthDay.of(9, 20)) +
         southernYear(2021, firstFallFrost = MonthDay.of(5, 10), lastSpringFrost = MonthDay.of(9, 30)) +
-        southernYear(2022, firstFallFrost = MonthDay.of(5, 30))
-    val summary = ClimateCalculator.summarize(days, SOUTH)!!
+        southernYear(2022, firstFallFrost = MonthDay.of(5, 30), lastSpringFrost = MonthDay.of(9, 25)) +
+        southernYear(2023, firstFallFrost = MonthDay.of(5, 20))
+    val frost = ClimateCalculator.summarize(days, SOUTH).frost as Frost
 
-    assertEquals(MonthDay.of(9, 25), summary.avgLastSpringFrost) // Sep 20 and Sep 30
-    assertEquals(MonthDay.of(5, 20), summary.avgFirstFallFrost) // May 10 and May 30
+    assertEquals(MonthDay.of(9, 25), frost.avgLastSpringFrost) // Sep 20, Sep 30, Sep 25
+    assertEquals(MonthDay.of(5, 20), frost.avgFirstFallFrost) // May 10, May 30, May 20
   }
 
   @Test
-  fun `southern growing season is November to March and partial seasons are ignored`() {
-    val days = southernYear(2020) + southernYear(2021) + southernYear(2022)
-    val summary = ClimateCalculator.summarize(days, SOUTH)!!
+  fun `southern growing season is November to March`() {
+    val days = (2020..2023).flatMap { southernYear(it) }
+    val precip = ClimateCalculator.summarize(days, SOUTH).precipitation!!
 
-    assertEquals(Month.NOVEMBER, summary.growingSeasonFirstMonth)
-    assertEquals(Month.MARCH, summary.growingSeasonLastMonth)
-    // Nov 30 + Dec 31 + Jan 31 + Feb 28 + Mar 31 days at 1 mm, in both complete seasons.
-    assertEquals(151.0, summary.avgGrowingSeasonPrecipMm!!, 0.001)
+    assertEquals(MonthRange(Month.NOVEMBER, Month.MARCH), precip.growingSeason)
+    // Nov 30 + Dec 31 + Jan 31 + Feb 28 + Mar 31 days at 1 mm, in the three complete seasons.
+    assertEquals(151.0, precip.avgGrowingSeasonMm!!, 0.001)
     // Annual precipitation still uses calendar years (2020 is a leap year).
-    assertEquals((366.0 + 365 + 365) / 3, summary.avgAnnualPrecipMm, 0.001)
-    assertEquals(2020, summary.firstYear)
+    assertEquals((366.0 + 365 + 365 + 365) / 4, precip.avgAnnualMm, 0.001)
   }
 
   @Test
