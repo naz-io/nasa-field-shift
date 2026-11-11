@@ -17,3 +17,6 @@ local.properties
 # Kotlin 2.x build cache and IDE settings
 .kotlin/
 /.idea/
+
+# Google Maps API key – never commit
+secrets.properties

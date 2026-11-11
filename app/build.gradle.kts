@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -14,6 +16,13 @@ android {
     targetSdk = 37
     versionCode = 1
     versionName = "1.0"
+
+    // The Google Maps key lives in secrets.properties (git-ignored) so it never reaches the public
+    // repo. A manifest placeholder copies it into AndroidManifest.xml at build time.
+    // Without the file the build still works, but the map renders blank.
+    val secrets = Properties()
+    rootProject.file("secrets.properties").takeIf { it.exists() }?.inputStream()?.use(secrets::load)
+    manifestPlaceholders["MAPS_API_KEY"] = secrets.getProperty("MAPS_API_KEY", "")
   }
 
   buildTypes {
