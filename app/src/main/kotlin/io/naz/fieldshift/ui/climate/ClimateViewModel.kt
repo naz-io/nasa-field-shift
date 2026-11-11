@@ -13,9 +13,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.time.Clock
 import java.time.LocalDate
 
+
+const val OFFLINE_MESSAGE = "Can't reach NASA right now. Check your internet connection and try again."
+const val UNAVAILABLE_MESSAGE = "NASA's climate service didn't answer as expected. Please try again later."
 
 /** A sealed interface makes `when` exhaustive: the screen must handle every state. */
 sealed interface ClimateUiState {
@@ -56,8 +60,12 @@ class ClimateViewModel(
           ClimateUiState.Success(ClimateCalculator.summarize(days, location.latitude))
         } catch (e: CancellationException) {
           throw e // never swallow cancellation – it's how coroutines stop
+        } catch (e: IOException) {
+          // No connection, DNS failure, timeout: the farmer can fix these, so say how.
+          ClimateUiState.Error(OFFLINE_MESSAGE)
         } catch (e: Exception) {
-          ClimateUiState.Error(e.message ?: "Couldn't load climate data.")
+          // Anything else (e.g. NASA returned something unexpected) isn't fixable by the farmer.
+          ClimateUiState.Error(UNAVAILABLE_MESSAGE)
         }
     }
   }

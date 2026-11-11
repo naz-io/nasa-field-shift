@@ -87,11 +87,18 @@ class ClimateViewModelTest {
   }
 
   @Test
+  fun `an unexpected failure gets a different message than being offline`() = runTest {
+    val viewModel = ClimateViewModel(FakeRepository { throw IllegalStateException("bad JSON") }, FIELD, CLOCK)
+    advanceUntilIdle()
+    assertEquals(ClimateUiState.Error(UNAVAILABLE_MESSAGE), viewModel.uiState.value)
+  }
+
+  @Test
   fun `network failure shows error and retry recovers`() = runTest {
     val repository = FakeRepository { throw IOException("offline") }
     val viewModel = ClimateViewModel(repository, FIELD, CLOCK)
     advanceUntilIdle()
-    assertEquals(ClimateUiState.Error("offline"), viewModel.uiState.value)
+    assertEquals(ClimateUiState.Error(OFFLINE_MESSAGE), viewModel.uiState.value)
 
     repository.result = { threeYears }
     viewModel.load()
