@@ -48,7 +48,9 @@ class GeocoderPlaceSearch(context: Context) : PlaceSearch {
   private suspend fun fromName(query: String): List<Address> =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       suspendCancellableCoroutine { cont ->
-        geocoder.getFromLocationName(query, MAX_RESULTS, listener(cont))
+        // The call itself can throw (bad input, service error) before any callback fires.
+        runCatching { geocoder.getFromLocationName(query, MAX_RESULTS, listener(cont)) }
+          .onFailure { if (cont.isActive) cont.resume(emptyList()) }
       }
     } else {
       withContext(Dispatchers.IO) {
@@ -62,7 +64,8 @@ class GeocoderPlaceSearch(context: Context) : PlaceSearch {
   private suspend fun fromPoint(point: GeoPoint): List<Address> =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       suspendCancellableCoroutine { cont ->
-        geocoder.getFromLocation(point.latitude, point.longitude, 1, listener(cont))
+        runCatching { geocoder.getFromLocation(point.latitude, point.longitude, 1, listener(cont)) }
+          .onFailure { if (cont.isActive) cont.resume(emptyList()) }
       }
     } else {
       withContext(Dispatchers.IO) {

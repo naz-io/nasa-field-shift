@@ -9,6 +9,9 @@ import io.naz.fieldshift.domain.FieldLocation
 import io.naz.fieldshift.domain.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -27,6 +30,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.IOException
 
 private val GUELPH = GeoPoint(43.55, -80.25)
 private val SAVED = FieldLocation("Near Guelph, Ontario", GUELPH)
@@ -249,16 +253,22 @@ class FieldPickerViewModelTest {
   }
 
   @Test
-  fun `confirm saves the field with its place name`() = runTest(dispatcher) {
+  fun `confirm saves the field and then asks to navigate`() = runTest(dispatcher) {
     val fields = FakeFields(null)
     val vm = viewModel(fields = fields, search = FakeSearch(name = "Near Guelph, Ontario"))
     vm.onCameraIdle(GUELPH)
     advanceUntilIdle()
 
-    val chosen = vm.confirm()
+    vm.confirm()
+    assertTrue(vm.uiState.value.isSaving)
+    assertNull(vm.uiState.value.navigateTo) // not before the save finished
     advanceUntilIdle()
-    assertEquals(SAVED, chosen)
+
     assertEquals(SAVED, fields.lastField.value)
+    assertEquals(SAVED, vm.uiState.value.navigateTo)
+    assertFalse(vm.uiState.value.isSaving)
+    vm.onNavigated()
+    assertNull(vm.uiState.value.navigateTo)
   }
 
   @Test
@@ -266,6 +276,86 @@ class FieldPickerViewModelTest {
     val vm = viewModel(search = FakeSearch(name = null))
     vm.onCameraIdle(GUELPH)
     advanceUntilIdle()
-    assertEquals("43.5500°N, 80.2500°W", vm.confirm().name)
+    vm.confirm()
+    advanceUntilIdle()
+    assertEquals("43.5500°N, 80.2500°W", vm.uiState.value.navigateTo?.name)
+  }
+
+  // --- Failures -----------------------------------------------------------------------------
+
+  private class BrokenFields(val failRead: Boolean = false, val failSave: Boolean = false) : FieldRepository {
+    override val lastField: Flow<FieldLocation?> = flow {
+      if (failRead) throw IOException("disk unreadable")
+      emit(null)
+    }
+
+    override suspend fun save(field: FieldLocation) {
+      if (failSave) throw IOException("disk full")
+    }
+  }
+
+  @Test
+  fun `unreadable storage starts the picker at the default place`() = runTest(dispatcher) {
+    val vm = FieldPickerViewModel(BrokenFields(failRead = true), FakeSearch(), FakeLocation())
+    advanceUntilIdle()
+    assertTrue(vm.uiState.value.ready)
+    assertEquals(DEFAULT_START, vm.uiState.value.startPoint)
+  }
+
+  @Test
+  fun `a failed save still navigates and says the field won't be remembered`() = runTest(dispatcher) {
+    val vm = FieldPickerViewModel(BrokenFields(failSave = true), FakeSearch(), FakeLocation())
+    advanceUntilIdle()
+    vm.confirm()
+    advanceUntilIdle()
+    assertNotNull(vm.uiState.value.navigateTo)
+    assertTrue(vm.uiState.value.message!!.contains("Couldn't remember"))
+    assertFalse(vm.uiState.value.isSaving)
+  }
+
+  private class ThrowingSearch : PlaceSearch {
+    override suspend fun search(query: String): List<PlaceResult> = throw IllegalStateException("geocoder down")
+
+    override suspend fun nameFor(point: GeoPoint): String? = throw IllegalStateException("geocoder down")
+  }
+
+  private class HangingSearch : PlaceSearch {
+    override suspend fun search(query: String): List<PlaceResult> = awaitCancellation()
+
+    override suspend fun nameFor(point: GeoPoint): String? = awaitCancellation()
+  }
+
+  @Test
+  fun `a geocoder that throws leaves the picker usable`() = runTest(dispatcher) {
+    val vm = FieldPickerViewModel(FakeFields(null), ThrowingSearch(), FakeLocation()).also { advanceUntilIdle() }
+
+    vm.onCameraIdle(GUELPH)
+    advanceUntilIdle()
+    assertNull(vm.uiState.value.placeName)
+    assertFalse(vm.uiState.value.isResolvingName)
+
+    vm.onQueryChange("Guelph")
+    vm.search()
+    advanceUntilIdle()
+    assertFalse(vm.uiState.value.isSearching)
+    assertTrue(vm.uiState.value.message!!.contains("isn't working"))
+  }
+
+  @Test
+  fun `a geocoder that hangs times out instead of spinning forever`() = runTest(dispatcher) {
+    val vm = FieldPickerViewModel(FakeFields(null), HangingSearch(), FakeLocation())
+    advanceTimeBy(1) // let init run; lookups below are still hanging
+
+    vm.onQueryChange("Guelph")
+    vm.search()
+    runCurrent()
+    assertTrue(vm.uiState.value.isSearching)
+
+    advanceTimeBy(PLACE_LOOKUP_TIMEOUT_MS + 1)
+    assertFalse(vm.uiState.value.isSearching)
+    assertTrue(vm.uiState.value.message!!.contains("isn't working"))
+
+    advanceUntilIdle() // the name lookups time out too, including the retry
+    assertFalse(vm.uiState.value.isResolvingName)
   }
 }

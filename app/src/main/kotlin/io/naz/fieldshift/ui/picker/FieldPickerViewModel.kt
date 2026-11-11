@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
 
 /** First-launch view: southern Ontario farmland, zoomed out so the farmer can find their area. */
 val DEFAULT_START = GeoPoint(43.6, -80.6)
@@ -27,6 +29,9 @@ const val PLACE_ZOOM = 13f
 /** Wait this long after the map stops before looking up a name, so we don't spam the geocoder. */
 const val NAME_LOOKUP_DEBOUNCE_MS = 400L
 const val NAME_LOOKUP_RETRY_MS = 1_500L
+
+/** A place search or name lookup that takes longer than this is treated as failed. */
+const val PLACE_LOOKUP_TIMEOUT_MS = 10_000L
 
 /**
  * A request for the screen to move the map. The [id] makes two requests to the same point distinct,
@@ -50,6 +55,14 @@ data class FieldPickerUiState(
   val cameraRequest: CameraRequest? = null,
   /** One message at a time for the snackbar; cleared with [FieldPickerViewModel.messageShown]. */
   val message: String? = null,
+  /** True while "Use this field" is saving; the button is disabled meanwhile. */
+  val isSaving: Boolean = false,
+  /**
+   * Set once the field has been saved (or saving failed): the screen navigates, then calls
+   * [FieldPickerViewModel.onNavigated]. Keeping this in state, not in a callback, means the
+   * navigation can't be lost if the screen is briefly recreated (e.g. rotated) while saving.
+   */
+  val navigateTo: FieldLocation? = null,
 )
 
 class FieldPickerViewModel(
@@ -67,7 +80,8 @@ class FieldPickerViewModel(
 
   init {
     viewModelScope.launch {
-      val saved = fieldRepository.lastField.first()
+      // If storage can't be read, start fresh rather than leaving the farmer on a spinner.
+      val saved = recovering { fieldRepository.lastField.first() }
       _uiState.update {
         if (saved == null) it.copy(ready = true)
         else
@@ -93,10 +107,10 @@ class FieldPickerViewModel(
         delay(NAME_LOOKUP_DEBOUNCE_MS)
         // The geocoder occasionally fails once (e.g. just after app start), so retry one time.
         val name =
-          placeSearch.nameFor(point)
+          lookup { placeSearch.nameFor(point) }
             ?: run {
               delay(NAME_LOOKUP_RETRY_MS)
-              placeSearch.nameFor(point)
+              lookup { placeSearch.nameFor(point) }
             }
         _uiState.update { it.copy(placeName = name, isResolvingName = false) }
       }
@@ -113,16 +127,22 @@ class FieldPickerViewModel(
     _uiState.update { it.copy(isSearching = true, results = emptyList()) }
     searchJob =
       viewModelScope.launch {
-        val results = placeSearch.search(query)
+        // null = the search itself failed or timed out; empty = it worked but found nothing.
+        val results = lookup { placeSearch.search(query) }
         _uiState.update {
           it.copy(
             isSearching = false,
-            results = if (results.size > 1) results else emptyList(),
-            message = if (results.isEmpty()) "No places found for “$query”." else null,
+            results = if (results != null && results.size > 1) results else emptyList(),
+            message =
+              when {
+                results == null -> "Search isn't working right now – move the map to your field instead."
+                results.isEmpty() -> "No places found for “$query”."
+                else -> null
+              },
           )
         }
         // One clear match: go straight there.
-        results.singleOrNull()?.let(::choose)
+        results?.singleOrNull()?.let(::choose)
       }
   }
 
@@ -163,13 +183,45 @@ class FieldPickerViewModel(
 
   fun messageShown() = _uiState.update { it.copy(message = null) }
 
-  /** Saves the field (so the app reopens on it) and returns it for navigation. */
-  fun confirm(): FieldLocation {
+  /**
+   * Saves the field so the app reopens on it, then asks the screen to navigate via [navigateTo].
+   * Saving is a convenience: if it fails, the farmer still gets their climate data, plus a note.
+   */
+  fun confirm() {
     val state = _uiState.value
+    if (state.isSaving || state.navigateTo != null) return // ignore double taps
     val field = FieldLocation(name = state.placeName ?: state.target.display(), point = state.target)
-    viewModelScope.launch { fieldRepository.save(field) }
-    return field
+    _uiState.update { it.copy(isSaving = true) }
+    viewModelScope.launch {
+      val saved = recovering { fieldRepository.save(field) } != null
+      _uiState.update {
+        it.copy(
+          isSaving = false,
+          navigateTo = field,
+          message = if (saved) it.message else "Couldn't remember this field for next time.",
+        )
+      }
+    }
   }
+
+  fun onNavigated() = _uiState.update { it.copy(navigateTo = null) }
+
+  /** Runs a geocoder call with a timeout; any failure becomes null. */
+  private suspend fun <T> lookup(block: suspend () -> T): T? =
+    recovering { withTimeoutOrNull(PLACE_LOOKUP_TIMEOUT_MS.milliseconds) { block() } }
+
+  /**
+   * Turns failures into null – except cancellation, which must propagate so coroutines can stop
+   * (a cancelled search must not show "Search isn't working").
+   */
+  private suspend fun <T> recovering(block: suspend () -> T): T? =
+    try {
+      block()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      null
+    }
 
   private fun moveCamera(point: GeoPoint, zoom: Float) =
     _uiState.update { it.copy(cameraRequest = CameraRequest(++nextRequestId, point, zoom)) }

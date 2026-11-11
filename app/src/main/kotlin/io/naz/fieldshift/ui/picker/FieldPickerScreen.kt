@@ -95,6 +95,14 @@ fun FieldPickerScreen(
     }
   }
 
+  // Navigate once the ViewModel has finished saving the chosen field.
+  LaunchedEffect(state.navigateTo) {
+    state.navigateTo?.let {
+      onFieldChosen(it)
+      viewModel.onNavigated()
+    }
+  }
+
   // Ask for location only when the farmer taps the button. Either permission is enough:
   // on Android 12+ the farmer may grant only "approximate", which is fine for finding a field.
   val permissionLauncher =
@@ -130,7 +138,7 @@ fun FieldPickerScreen(
               arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
             )
         },
-        onConfirm = { onFieldChosen(viewModel.confirm()) },
+        onConfirm = viewModel::confirm,
       )
     }
   }
@@ -288,7 +296,7 @@ private fun SelectionCard(state: FieldPickerUiState, onConfirm: () -> Unit) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
-      Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(56.dp)) {
+      Button(onClick = onConfirm, enabled = !state.isSaving, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(56.dp)) {
         Text("Use this field")
       }
     }
