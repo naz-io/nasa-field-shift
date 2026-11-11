@@ -1,0 +1,164 @@
+package com.naz.fieldshift.ui.climate
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.naz.fieldshift.R
+import com.naz.fieldshift.data.PowerClimateRepository
+import com.naz.fieldshift.data.remote.PowerApi
+import com.naz.fieldshift.domain.ClimateSummary
+import com.naz.fieldshift.ui.theme.FieldShiftTheme
+import java.time.MonthDay
+import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
+
+/**
+ * "Stateful" entry point: owns the ViewModel and collects its state.
+ * Until Hilt arrives in milestone 2 we build the dependencies by hand in the factory lambda.
+ */
+@Composable
+fun ClimateScreen(
+  modifier: Modifier = Modifier,
+  viewModel: ClimateViewModel = viewModel {
+    ClimateViewModel(PowerClimateRepository(PowerApi.create()))
+  },
+) {
+  // Lifecycle-aware: stops collecting when the app is in the background.
+  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  ClimateScreen(
+    location = viewModel.location,
+    uiState = uiState,
+    onRetry = viewModel::load,
+    modifier = modifier,
+  )
+}
+
+/** "Stateless" version: just data in, events out – easy to preview and test. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ClimateScreen(
+  location: FieldLocation,
+  uiState: ClimateUiState,
+  onRetry: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Scaffold(
+    modifier = modifier,
+    topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
+  ) { innerPadding ->
+    Column(
+      modifier =
+        Modifier.padding(innerPadding)
+          .fillMaxSize()
+          .verticalScroll(rememberScrollState())
+          .padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Column {
+        Text(location.name, style = MaterialTheme.typography.headlineSmall)
+        Text(
+          "%.2f°, %.2f°".format(location.latitude, location.longitude),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+
+      when (uiState) {
+        ClimateUiState.Loading ->
+          Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+          }
+        is ClimateUiState.Error -> {
+          Text(uiState.message, color = MaterialTheme.colorScheme.error)
+          Button(onClick = onRetry) { Text("Retry") }
+        }
+        is ClimateUiState.Success -> SummaryContent(uiState.summary)
+      }
+    }
+  }
+}
+
+@Composable
+private fun SummaryContent(summary: ClimateSummary) {
+  StatCard(
+    title = "Precipitation",
+    rows =
+      listOf(
+        "Average per year" to "${summary.avgAnnualPrecipMm.roundToInt()} mm",
+        "Growing season (May–Sep)" to "${summary.avgGrowingSeasonPrecipMm.roundToInt()} mm",
+      ),
+  )
+  StatCard(
+    title = "Frost",
+    rows =
+      listOf(
+        "Average last spring frost" to summary.avgLastSpringFrost.display(),
+        "Average first fall frost" to summary.avgFirstFallFrost.display(),
+        "Frost-free season" to (summary.avgFrostFreeDays?.let { "$it days" } ?: "—"),
+      ),
+  )
+  Text(
+    "Averages for ${summary.firstYear}–${summary.lastYear} from NASA POWER (MERRA-2). " +
+      "Precipitation includes snow. Values are for a grid cell tens of kilometres wide, " +
+      "so your field may be frostier or drier – check local station records.",
+    style = MaterialTheme.typography.bodySmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+  )
+}
+
+@Composable
+private fun StatCard(title: String, rows: List<Pair<String, String>>) {
+  Card(Modifier.fillMaxWidth()) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Text(title, style = MaterialTheme.typography.titleMedium)
+      rows.forEach { (label, value) ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text(label, style = MaterialTheme.typography.bodyLarge)
+          Text(value, style = MaterialTheme.typography.bodyLarge)
+        }
+      }
+    }
+  }
+}
+
+private val MONTH_DAY = DateTimeFormatter.ofPattern("MMM d")
+
+private fun MonthDay?.display(): String = this?.format(MONTH_DAY) ?: "None"
+
+@Preview(showBackground = true)
+@Composable
+private fun ClimateScreenPreview() {
+  FieldShiftTheme {
+    ClimateScreen(
+      location = DEFAULT_LOCATION,
+      uiState =
+        ClimateUiState.Success(
+          ClimateSummary(2020, 2024, 850.0, 390.0, MonthDay.of(4, 28), MonthDay.of(10, 20), 174)
+        ),
+      onRetry = {},
+    )
+  }
+}
