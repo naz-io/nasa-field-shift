@@ -83,6 +83,8 @@ Adding a region means adding a pack, not changing the app.
 | SRTM elevation | slope, erosion risk | Planned |
 | SMAP soil moisture, ECOSTRESS, GPM, Landsat, GRACE / GRACE-FO | soil moisture, heat stress, rainfall extremes, long-term water trends | Future (needs a backend for Earthdata access and processing) |
 
+**Known limit:** POWER's daily minimum temperature is an average over a grid cell about 50 km wide, so it can miss frosts in cold hollows and valleys. Near Clare, South Australia, for example, it shows only one day at or below 0 °C in five years.
+
 *Data source: NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science Program.*
 
 ## Roadmap
@@ -90,10 +92,10 @@ Adding a region means adding a pack, not changing the app.
 Items marked *(new)* were added after reading the challenge brief.
 
 - [x] **M1** Climate summary for a fixed location: precipitation and frost dates from NASA POWER
+- [x] **M5** Google Maps field picker, location permission and the remembered last field. Built before M2–M4 so the app works for any farm. Also covers the hemisphere-aware frost seasons from M3.
 - [ ] **M2** Hilt dependency injection and a Room offline cache
-- [ ] **M3** Rule-based rotation scorer, the region-pack structure and the Ontario pack, with unit tests. *(new)* Soil input, priority sub-factors, evidence and gaps text, and hemisphere-aware frost logic.
+- [ ] **M3** Rule-based rotation scorer, the region-pack structure and the Ontario pack, with unit tests. *(new)* Soil input, priority sub-factors, and the evidence and gaps text.
 - [ ] **M4** Priority sliders, constraints *(new)* and the 3 five-section comparison cards
-- [ ] **M5** Map field picker and location permission
 - [ ] **M6** Charts (Vico) and the season timeline *(new)*, WorkManager frost and dry-spell alerts, MODIS NDVI
 - [ ] **M7** *(new)* Plain-language explainers, SRTM slope and erosion risk
 - **Future:** automatic soil lookup (ISRIC SoilGrids); SMAP, ECOSTRESS and GRACE through a backend; more region packs; a model-based scorer experiment
@@ -110,7 +112,9 @@ Screens are designed in Google Stitch and coloured with Material Theme Builder. 
 | Architecture | MVVM, `StateFlow`, Navigation 3 |
 | Networking | Retrofit, kotlinx.serialization, coroutines |
 | Testing | JUnit, kotlinx-coroutines-test |
-| Planned | Hilt, Room, DataStore, Google Maps Compose, WorkManager, Vico |
+| Maps and location | Google Maps Compose, Fused Location Provider, Android Geocoder |
+| Storage | DataStore Preferences |
+| Planned | Hilt, Room, WorkManager, Vico |
 
 ### Architecture
 
@@ -127,10 +131,14 @@ data/    Repositories, NASA POWER API client (Retrofit), later Room cache
 The UI depends on the repository *interface*, not on Retrofit. This keeps the ViewModel testable with fakes and lets a cache be added behind it without UI changes.
 
 Current packages, under `app/src/main/kotlin/io/naz/fieldshift/`:
-- `data/remote/PowerApi.kt`: the API client and JSON models
-- `data/ClimateRepository.kt`: the repository, which maps the API response to domain models
-- `domain/ClimateCalculator.kt`: precipitation and frost-date statistics
-- `ui/climate/`: the climate summary screen and its ViewModel
+- `AppContainer.kt`: manual dependency injection, until Hilt in M2
+- `data/remote/PowerApi.kt`: the NASA POWER client and JSON models
+- `data/ClimateRepository.kt`: maps the API response to domain models
+- `data/FieldRepository.kt`: remembers the last field with DataStore
+- `data/location/`: place search (Geocoder) and device location (Fused Location)
+- `domain/ClimateCalculator.kt`: precipitation, frost dates and the growing season, per hemisphere
+- `ui/picker/`: the Google Maps field picker
+- `ui/climate/`: the climate summary screen
 
 ## Build and run
 
@@ -147,7 +155,15 @@ Requirements:
 ./gradlew testDebugUnitTest
 ```
 
-No API key is needed, because NASA POWER is open.
+NASA POWER needs no API key. The map needs a **Google Maps API key**:
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), enable **Maps SDK for Android** and create an API key.
+2. Restrict the key: under **Android apps**, add package `io.naz.fieldshift` with your debug SHA-1. Get the SHA-1 with `./gradlew signingReport`. Under **API restrictions**, allow **Maps SDK for Android** only.
+3. Create `secrets.properties` in the project root, containing:
+   ```properties
+   MAPS_API_KEY=your-key-here
+   ```
+   This file is git-ignored, so never commit it. Without it the app still builds, but the map stays blank.
 
 ## Learning goals
 
