@@ -9,6 +9,7 @@ import io.naz.fieldshift.domain.FieldLocation
 import io.naz.fieldshift.domain.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -164,6 +165,67 @@ class FieldPickerViewModelTest {
     assertNotNull(vm.uiState.value.message)
     vm.messageShown()
     assertNull(vm.uiState.value.message)
+  }
+
+  @Test
+  fun `a newer search wins over a slower earlier one`() = runTest(dispatcher) {
+    val elora = GeoPoint(43.68, -80.43)
+    val search =
+      object : PlaceSearch {
+        override suspend fun search(query: String): List<PlaceResult> =
+          if (query == "Guelph") {
+            delay(1_000) // slow
+            listOf(PlaceResult("Guelph, ON", GUELPH))
+          } else {
+            delay(100)
+            listOf(PlaceResult("Elora, ON", elora))
+          }
+
+        override suspend fun nameFor(point: GeoPoint): String? = null
+      }
+    val vm = FieldPickerViewModel(FakeFields(null), search, FakeLocation()).also { advanceUntilIdle() }
+
+    vm.onQueryChange("Guelph")
+    vm.search()
+    vm.onQueryChange("Elora")
+    vm.search()
+    advanceUntilIdle()
+
+    assertEquals(elora, vm.uiState.value.cameraRequest?.point)
+    assertEquals("Elora, ON", vm.uiState.value.query)
+    assertFalse(vm.uiState.value.isSearching)
+  }
+
+  @Test
+  fun `repeated taps on use my location make one request`() = runTest(dispatcher) {
+    var requests = 0
+    val location =
+      FakeLocation(
+        result = {
+          requests++
+          GUELPH
+        }
+      )
+    val slow =
+      object : LocationProvider by location {
+        override suspend fun currentLocation(): GeoPoint {
+          delay(2_000)
+          return location.currentLocation()
+        }
+      }
+    val vm = FieldPickerViewModel(FakeFields(null), FakeSearch(), slow).also { advanceUntilIdle() }
+
+    vm.useMyLocation()
+    vm.useMyLocation()
+    vm.useMyLocation()
+    advanceUntilIdle()
+
+    assertEquals(1, requests)
+    assertFalse(vm.uiState.value.isLocating)
+
+    vm.useMyLocation() // allowed again once the first one finished
+    advanceUntilIdle()
+    assertEquals(2, requests)
   }
 
   @Test

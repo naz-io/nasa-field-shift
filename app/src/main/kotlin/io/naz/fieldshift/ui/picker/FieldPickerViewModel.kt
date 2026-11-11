@@ -62,6 +62,7 @@ class FieldPickerViewModel(
   val uiState: StateFlow<FieldPickerUiState> = _uiState.asStateFlow()
 
   private var nameJob: Job? = null
+  private var searchJob: Job? = null
   private var nextRequestId = 0L
 
   init {
@@ -106,19 +107,23 @@ class FieldPickerViewModel(
   fun search() {
     val query = _uiState.value.query.trim()
     if (query.isEmpty()) return
-    viewModelScope.launch {
-      _uiState.update { it.copy(isSearching = true, results = emptyList()) }
-      val results = placeSearch.search(query)
-      _uiState.update {
-        it.copy(
-          isSearching = false,
-          results = if (results.size > 1) results else emptyList(),
-          message = if (results.isEmpty()) "No places found for “$query”." else null,
-        )
+    // A new search replaces the previous one. Without this, a slow earlier search could finish
+    // last and overwrite the newer results – or move the map to the old place.
+    searchJob?.cancel()
+    _uiState.update { it.copy(isSearching = true, results = emptyList()) }
+    searchJob =
+      viewModelScope.launch {
+        val results = placeSearch.search(query)
+        _uiState.update {
+          it.copy(
+            isSearching = false,
+            results = if (results.size > 1) results else emptyList(),
+            message = if (results.isEmpty()) "No places found for “$query”." else null,
+          )
+        }
+        // One clear match: go straight there.
+        results.singleOrNull()?.let(::choose)
       }
-      // One clear match: go straight there.
-      results.singleOrNull()?.let(::choose)
-    }
   }
 
   fun choose(result: PlaceResult) {
@@ -131,8 +136,11 @@ class FieldPickerViewModel(
   fun hasLocationPermission(): Boolean = locationProvider.hasPermission()
 
   fun useMyLocation() {
+    // Ignore repeated taps while a request is running. The flag is set *before* launching, so a
+    // second tap in the same frame already sees it.
+    if (_uiState.value.isLocating) return
+    _uiState.update { it.copy(isLocating = true) }
     viewModelScope.launch {
-      _uiState.update { it.copy(isLocating = true) }
       try {
         moveCamera(locationProvider.currentLocation(), FIELD_ZOOM)
       } catch (e: CancellationException) {
