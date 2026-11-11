@@ -13,6 +13,7 @@ import io.naz.fieldshift.domain.GeoPoint
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.milliseconds
 
 /** The device's current position. An interface so tests can fake it. */
 interface LocationProvider {
@@ -45,7 +46,7 @@ class FusedLocationProvider(private val context: Context) : LocationProvider {
     // which is a CancellationException – callers rightly re-throw those, so a timeout would end
     // silently instead of showing the farmer a message.
     val fresh =
-      withTimeoutOrNull(TIMEOUT_MS) {
+      withTimeoutOrNull(TIMEOUT_MS.milliseconds) {
         val cancel = CancellationTokenSource()
         try {
           client.getCurrentLocation(priority, cancel.token).awaitOrNull()
