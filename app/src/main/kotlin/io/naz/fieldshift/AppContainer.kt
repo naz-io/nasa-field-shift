@@ -11,6 +11,7 @@ import io.naz.fieldshift.data.location.GeocoderPlaceSearch
 import io.naz.fieldshift.data.location.LocationProvider
 import io.naz.fieldshift.data.location.PlaceSearch
 import io.naz.fieldshift.data.remote.PowerApi
+import java.time.Clock
 
 /** One DataStore per file per process – the delegate guarantees that. */
 private val Context.fieldDataStore by preferencesDataStore(name = "field")
@@ -22,6 +23,9 @@ private val Context.fieldDataStore by preferencesDataStore(name = "field")
  */
 class AppContainer(context: Context) {
   private val appContext = context.applicationContext
+
+  /** "Now" for the whole app. Tests use Clock.fixed(...) instead. */
+  val clock: Clock = Clock.systemDefaultZone()
 
   val climateRepository: ClimateRepository by lazy { PowerClimateRepository(PowerApi.create()) }
   val fieldRepository: FieldRepository by lazy { DataStoreFieldRepository(appContext.fieldDataStore) }

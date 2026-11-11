@@ -17,8 +17,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.IOException
+import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 
+/** 11 Nov 2026 – so the expected range is 2016–2025. */
+private val CLOCK = Clock.fixed(Instant.parse("2026-11-11T12:00:00Z"), ZoneOffset.UTC)
 private val FIELD = FieldLocation("Near Guelph, Ontario", GeoPoint(43.55, -80.25))
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -30,12 +35,17 @@ class ClimateViewModelTest {
   @After fun tearDown() = Dispatchers.resetMain()
 
   private class FakeRepository(var result: () -> List<DailyWeather>) : ClimateRepository {
+    var requestedYears: Pair<Int, Int>? = null
+
     override suspend fun getDailyWeather(
       latitude: Double,
       longitude: Double,
       startYear: Int,
       endYear: Int,
-    ) = result()
+    ): List<DailyWeather> {
+      requestedYears = startYear to endYear
+      return result()
+    }
   }
 
   // Three complete years: the minimum the calculator needs for an average.
@@ -47,7 +57,7 @@ class ClimateViewModelTest {
 
   @Test
   fun `starts loading then shows summary`() = runTest {
-    val viewModel = ClimateViewModel(FakeRepository { threeYears }, FIELD)
+    val viewModel = ClimateViewModel(FakeRepository { threeYears }, FIELD, CLOCK)
     assertEquals(ClimateUiState.Loading, viewModel.uiState.value)
 
     advanceUntilIdle()
@@ -57,9 +67,18 @@ class ClimateViewModelTest {
   }
 
   @Test
+  fun `asks NASA for the ten most recent complete years`() = runTest {
+    val repository = FakeRepository { threeYears }
+    val viewModel = ClimateViewModel(repository, FIELD, CLOCK)
+    advanceUntilIdle()
+    assertEquals(2016 to 2025, repository.requestedYears)
+    assertEquals(10, viewModel.years.count)
+  }
+
+  @Test
   fun `network failure shows error and retry recovers`() = runTest {
     val repository = FakeRepository { throw IOException("offline") }
-    val viewModel = ClimateViewModel(repository, FIELD)
+    val viewModel = ClimateViewModel(repository, FIELD, CLOCK)
     advanceUntilIdle()
     assertEquals(ClimateUiState.Error("offline"), viewModel.uiState.value)
 

@@ -49,7 +49,7 @@ private fun climateViewModel(location: FieldLocation): ClimateViewModel {
   val container = LocalContext.current.appContainer
   // Thanks to Nav3's ViewModel decorator, this store belongs to one Climate back-stack entry,
   // so each field gets its own ViewModel.
-  return viewModel { ClimateViewModel(container.climateRepository, location) }
+  return viewModel { ClimateViewModel(container.climateRepository, location, container.clock) }
 }
 
 /** "Stateful" entry point: owns the ViewModel and collects its state. */
