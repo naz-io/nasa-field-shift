@@ -35,6 +35,7 @@ import io.naz.fieldshift.domain.FieldLocation
 import io.naz.fieldshift.domain.FrostStats
 import io.naz.fieldshift.domain.MonthRange
 import io.naz.fieldshift.domain.PrecipitationStats
+import io.naz.fieldshift.domain.YearRange
 import io.naz.fieldshift.domain.GeoPoint
 import io.naz.fieldshift.ui.theme.FieldShiftTheme
 import java.time.Month
@@ -64,6 +65,7 @@ fun ClimateScreen(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   ClimateScreen(
     location = viewModel.location,
+    years = viewModel.years,
     uiState = uiState,
     onRetry = viewModel::load,
     onChangeField = onChangeField,
@@ -76,6 +78,7 @@ fun ClimateScreen(
 @Composable
 internal fun ClimateScreen(
   location: FieldLocation,
+  years: YearRange,
   uiState: ClimateUiState,
   onRetry: () -> Unit,
   onChangeField: () -> Unit,
@@ -116,63 +119,102 @@ internal fun ClimateScreen(
           Text(uiState.message, color = MaterialTheme.colorScheme.error)
           Button(onClick = onRetry) { Text("Retry") }
         }
-        is ClimateUiState.Success -> SummaryContent(uiState.summary)
+        is ClimateUiState.Success -> SummaryContent(uiState.summary, years, northern = location.latitude >= 0)
       }
     }
   }
 }
 
 @Composable
-private fun SummaryContent(summary: ClimateSummary) {
+private fun SummaryContent(summary: ClimateSummary, years: YearRange, northern: Boolean) {
+  val period = "${years.first}–${years.last}"
+
   val precip = summary.precipitation
-  StatCard(
-    title = "Precipitation",
-    rows =
-      if (precip == null) listOf("Not enough data" to "—")
-      else
+  if (precip == null) {
+    StatCard(
+      title = "Precipitation",
+      notes = listOf("Not enough rain measurements in $period to give a reliable average."),
+    )
+  } else {
+    val season = "${precip.growingSeason.start.short()}–${precip.growingSeason.endInclusive.short()}"
+    StatCard(
+      title = "Precipitation",
+      rows =
         listOf(
           "Average per year" to "${precip.avgAnnualMm.roundToInt()} mm",
-          "Growing season (${precip.growingSeason.start.short()}–${precip.growingSeason.endInclusive.short()})" to
-            (precip.avgGrowingSeasonMm?.let { "${it.roundToInt()} mm" } ?: "—"),
+          "Growing season ($season)" to (precip.avgGrowingSeasonMm?.let { "${it.roundToInt()} mm" } ?: "Not enough data"),
         ),
-  )
-  StatCard(
-    title = "Frost",
-    rows =
-      when (val frost = summary.frost) {
-        is FrostStats.InsufficientData -> listOf("Not enough data" to "—")
-        is FrostStats.NoFrost -> listOf("No frost recorded" to "${frost.seasonsAnalysed} seasons")
-        is FrostStats.Frost ->
+      notes =
+        listOf(
+          "Based on ${precip.yearsAnalysed} years (${precip.firstYear}–${precip.lastYear}), " +
+            "${precip.coverage.asPercent()} of days measured.",
+          "$season is the typical ${if (northern) "northern" else "southern"}-hemisphere growing season, " +
+            "not your crop's actual season.",
+        ),
+    )
+  }
+
+  when (val frost = summary.frost) {
+    is FrostStats.InsufficientData ->
+      StatCard(
+        title = "Frost",
+        notes = listOf("Not enough temperature measurements in $period to work out frost dates."),
+      )
+    is FrostStats.NoFrost ->
+      StatCard(
+        title = "Frost",
+        notes =
+          listOf(
+            "No frost in any of the ${frost.seasonsAnalysed} seasons: the daily low never reached 0 °C " +
+              "in NASA's data. Sheltered or low-lying spots can still get frost."
+          ),
+      )
+    is FrostStats.Frost ->
+      StatCard(
+        title = "Frost",
+        rows =
           listOf(
             "Average last spring frost" to frost.avgLastSpringFrost.display(),
             "Average first fall frost" to frost.avgFirstFallFrost.display(),
             "Frost-free season" to (frost.avgFrostFreeDays?.let { "$it days" } ?: "—"),
-          )
-      },
-  )
+          ),
+        notes = listOf("Frost in ${frost.seasonsWithFrost} of ${frost.seasonsAnalysed} seasons ($period)."),
+      )
+  }
+
+  // bodyMedium (14 sp): the design brief's minimum for anything a farmer must be able to read outdoors.
   Text(
-    "Averages from NASA POWER (MERRA-2). " +
-      "Precipitation includes snow. Values are for a grid cell about 50 km wide, " +
-      "so your field may be frostier or drier – check local station records.",
-    style = MaterialTheme.typography.bodySmall,
+    "Historical averages from NASA POWER (MERRA-2) – not a forecast. Precipitation includes snow. " +
+      "Values describe a grid cell about 50 km wide, so your field may be frostier or drier – " +
+      "check local station records.",
+    style = MaterialTheme.typography.bodyMedium,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
   )
 }
 
 @Composable
-private fun StatCard(title: String, rows: List<Pair<String, String>>) {
+private fun StatCard(
+  title: String,
+  rows: List<Pair<String, String>> = emptyList(),
+  notes: List<String> = emptyList(),
+) {
   Card(Modifier.fillMaxWidth()) {
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
       Text(title, style = MaterialTheme.typography.titleMedium)
       rows.forEach { (label, value) ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text(label, style = MaterialTheme.typography.bodyLarge)
+          Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
           Text(value, style = MaterialTheme.typography.bodyLarge)
         }
+      }
+      notes.forEach { note ->
+        Text(note, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
   }
 }
+
+private fun Double.asPercent(): String = "%.1f%%".format(this * 100)
 
 private val MONTH_DAY = DateTimeFormatter.ofPattern("MMM d")
 
@@ -186,6 +228,7 @@ private fun ClimateScreenPreview() {
   FieldShiftTheme {
     ClimateScreen(
       location = FieldLocation("Near Guelph, Ontario", GeoPoint(43.55, -80.25)),
+      years = YearRange(2016, 2025),
       uiState =
         ClimateUiState.Success(
           ClimateSummary(

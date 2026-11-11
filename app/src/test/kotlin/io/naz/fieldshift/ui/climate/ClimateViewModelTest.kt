@@ -3,6 +3,7 @@ package io.naz.fieldshift.ui.climate
 import io.naz.fieldshift.data.ClimateRepository
 import io.naz.fieldshift.domain.DailyWeather
 import io.naz.fieldshift.domain.FieldLocation
+import io.naz.fieldshift.domain.FrostStats
 import io.naz.fieldshift.domain.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -73,6 +74,16 @@ class ClimateViewModelTest {
     advanceUntilIdle()
     assertEquals(2016 to 2025, repository.requestedYears)
     assertEquals(10, viewModel.years.count)
+  }
+
+  @Test
+  fun `too little data is a successful load that says so, not an error`() = runTest {
+    val viewModel = ClimateViewModel(FakeRepository { threeYears.take(400) }, FIELD, CLOCK)
+    advanceUntilIdle()
+
+    val summary = (viewModel.uiState.value as ClimateUiState.Success).summary
+    assertEquals(null, summary.precipitation)
+    assertEquals(FrostStats.InsufficientData(1), summary.frost)
   }
 
   @Test
