@@ -17,19 +17,22 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.naz.fieldshift.R
-import io.naz.fieldshift.data.PowerClimateRepository
-import io.naz.fieldshift.data.remote.PowerApi
+import io.naz.fieldshift.appContainer
 import io.naz.fieldshift.domain.ClimateSummary
+import io.naz.fieldshift.domain.FieldLocation
+import io.naz.fieldshift.domain.GeoPoint
 import io.naz.fieldshift.ui.theme.FieldShiftTheme
 import java.time.Month
 import java.time.MonthDay
@@ -38,16 +41,21 @@ import java.util.Locale
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
-/**
- * "Stateful" entry point: owns the ViewModel and collects its state.
- * Until Hilt arrives in milestone 2 we build the dependencies by hand in the factory lambda.
- */
+@Composable
+private fun climateViewModel(location: FieldLocation): ClimateViewModel {
+  val container = LocalContext.current.appContainer
+  // Thanks to Nav3's ViewModel decorator, this store belongs to one Climate back-stack entry,
+  // so each field gets its own ViewModel.
+  return viewModel { ClimateViewModel(container.climateRepository, location) }
+}
+
+/** "Stateful" entry point: owns the ViewModel and collects its state. */
 @Composable
 fun ClimateScreen(
+  location: FieldLocation,
+  onChangeField: () -> Unit,
   modifier: Modifier = Modifier,
-  viewModel: ClimateViewModel = viewModel {
-    ClimateViewModel(PowerClimateRepository(PowerApi.create()))
-  },
+  viewModel: ClimateViewModel = climateViewModel(location),
 ) {
   // Lifecycle-aware: stops collecting when the app is in the background.
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -55,6 +63,7 @@ fun ClimateScreen(
     location = viewModel.location,
     uiState = uiState,
     onRetry = viewModel::load,
+    onChangeField = onChangeField,
     modifier = modifier,
   )
 }
@@ -66,11 +75,17 @@ internal fun ClimateScreen(
   location: FieldLocation,
   uiState: ClimateUiState,
   onRetry: () -> Unit,
+  onChangeField: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Scaffold(
     modifier = modifier,
-    topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
+    topBar = {
+      CenterAlignedTopAppBar(
+        title = { Text(stringResource(R.string.app_name)) },
+        actions = { TextButton(onClick = onChangeField) { Text("Change field") } },
+      )
+    },
   ) { innerPadding ->
     Column(
       modifier =
@@ -83,7 +98,7 @@ internal fun ClimateScreen(
       Column {
         Text(location.name, style = MaterialTheme.typography.headlineSmall)
         Text(
-          "%.2f°, %.2f°".format(location.latitude, location.longitude),
+          location.point.display(),
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -126,7 +141,7 @@ private fun SummaryContent(summary: ClimateSummary) {
   )
   Text(
     "Averages for ${summary.firstYear}–${summary.lastYear} from NASA POWER (MERRA-2). " +
-      "Precipitation includes snow. Values are for a grid cell tens of kilometres wide, " +
+      "Precipitation includes snow. Values are for a grid cell about 50 km wide, " +
       "so your field may be frostier or drier – check local station records.",
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -159,7 +174,7 @@ private fun Month.short(): String = getDisplayName(TextStyle.SHORT, Locale.getDe
 private fun ClimateScreenPreview() {
   FieldShiftTheme {
     ClimateScreen(
-      location = DEFAULT_LOCATION,
+      location = FieldLocation("Near Guelph, Ontario", GeoPoint(43.55, -80.25)),
       uiState =
         ClimateUiState.Success(
           ClimateSummary(
@@ -175,6 +190,7 @@ private fun ClimateScreenPreview() {
           )
         ),
       onRetry = {},
+      onChangeField = {},
     )
   }
 }

@@ -2,6 +2,8 @@ package io.naz.fieldshift.ui.climate
 
 import io.naz.fieldshift.data.ClimateRepository
 import io.naz.fieldshift.domain.DailyWeather
+import io.naz.fieldshift.domain.FieldLocation
+import io.naz.fieldshift.domain.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -16,6 +18,8 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 import java.time.LocalDate
+
+private val FIELD = FieldLocation("Near Guelph, Ontario", GeoPoint(43.55, -80.25))
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ClimateViewModelTest {
@@ -39,7 +43,7 @@ class ClimateViewModelTest {
 
   @Test
   fun `starts loading then shows summary`() = runTest {
-    val viewModel = ClimateViewModel(FakeRepository { oneYear })
+    val viewModel = ClimateViewModel(FakeRepository { oneYear }, FIELD)
     assertEquals(ClimateUiState.Loading, viewModel.uiState.value)
 
     advanceUntilIdle()
@@ -51,7 +55,7 @@ class ClimateViewModelTest {
   @Test
   fun `network failure shows error and retry recovers`() = runTest {
     val repository = FakeRepository { throw IOException("offline") }
-    val viewModel = ClimateViewModel(repository)
+    val viewModel = ClimateViewModel(repository, FIELD)
     advanceUntilIdle()
     assertEquals(ClimateUiState.Error("offline"), viewModel.uiState.value)
 

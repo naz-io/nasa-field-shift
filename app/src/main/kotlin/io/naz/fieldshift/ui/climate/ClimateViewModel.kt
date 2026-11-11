@@ -5,16 +5,14 @@ import androidx.lifecycle.viewModelScope
 import io.naz.fieldshift.data.ClimateRepository
 import io.naz.fieldshift.domain.ClimateCalculator
 import io.naz.fieldshift.domain.ClimateSummary
+import io.naz.fieldshift.domain.FieldLocation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Fixed for milestone 1 (Toronto-area example); the map picker replaces it in milestone 5. */
-data class FieldLocation(val name: String, val latitude: Double, val longitude: Double)
-
-val DEFAULT_LOCATION = FieldLocation("Toronto, Ontario", 43.7, -79.4)
+/** The five most recent complete years. Moves forward when we add a refresh policy (M2). */
 const val START_YEAR = 2020
 const val END_YEAR = 2024
 
@@ -29,7 +27,7 @@ sealed interface ClimateUiState {
 
 class ClimateViewModel(
   private val repository: ClimateRepository,
-  val location: FieldLocation = DEFAULT_LOCATION,
+  val location: FieldLocation,
 ) : ViewModel() {
 
   // Private mutable flow, public read-only flow: only the ViewModel can change state.
