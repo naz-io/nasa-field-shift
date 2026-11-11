@@ -1,0 +1,48 @@
+# Runs on every push and pull request: unit tests, Android lint and a debug build.
+# A red check means something is broken before it reaches main.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the older, now-pointless run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # JDK 17 starts the Gradle wrapper. Gradle then provisions the daemon's own JDK (25) from
+      # gradle/gradle-daemon-jvm.properties, and Kotlin still compiles to Java 17 bytecode.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Caches Gradle downloads and build outputs between runs.
+      - uses: gradle/actions/setup-gradle@v6
+
+      # No Maps API key here on purpose: the build tolerates a missing secrets.properties
+      # (the map would just be blank), so CI needs no secrets at all.
+      - name: Test, lint and build
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
+
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 14
