@@ -88,32 +88,37 @@ object ClimateCalculator {
       }
     if (seasons.size < MIN_YEARS) return FrostStats.InsufficientData(seasons.size)
 
-    val springFrosts = mutableListOf<Long>()
-    val fallFrosts = mutableListOf<Long>()
+    val springFrosts = mutableListOf<Int>() // as day index in the reference season
+    val fallFrosts = mutableListOf<Int>()
+    val frostFreeLengths = mutableListOf<Long>()
     var seasonsWithFrost = 0
     for ((season, seasonDays) in seasons) {
-      val start = hemisphere.seasonStart(season)
-      val half = ChronoUnit.DAYS.between(start, start.plusMonths(6))
-      val frostIndexes =
-        seasonDays
-          .filter { it.tMinC != null && it.tMinC <= thresholdC }
-          .map { ChronoUnit.DAYS.between(start, it.date) }
-      if (frostIndexes.isNotEmpty()) seasonsWithFrost++
-      frostIndexes.filter { it < half }.maxOrNull()?.let { springFrosts += it }
-      frostIndexes.filter { it >= half }.minOrNull()?.let { fallFrosts += it }
+      val midSeason = hemisphere.seasonStart(season).plusMonths(6)
+      val frostDates = seasonDays.filter { it.tMinC != null && it.tMinC <= thresholdC }.map { it.date }
+      if (frostDates.isEmpty()) continue // counted in seasonsAnalysed, kept out of the date averages
+      seasonsWithFrost++
+
+      val spring = frostDates.filter { it < midSeason }.maxOrNull()
+      val fall = frostDates.filter { it >= midSeason }.minOrNull()
+      spring?.let { springFrosts += hemisphere.referenceIndex(it) }
+      fall?.let { fallFrosts += hemisphere.referenceIndex(it) }
+      // The frost-free length is measured inside each season, from its own real dates (leap days
+      // included), and only for seasons that had both frosts. Subtracting two separately averaged
+      // dates would mix seasons and give a length no season actually had.
+      if (spring != null && fall != null) frostFreeLengths += ChronoUnit.DAYS.between(spring, fall) - 1
     }
     if (seasonsWithFrost == 0) return FrostStats.NoFrost(seasons.size)
 
-    val avgSpring = springFrosts.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
-    val avgFall = fallFrosts.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
     return FrostStats.Frost(
-      avgLastSpringFrost = avgSpring?.let(hemisphere::toMonthDay),
-      avgFirstFallFrost = avgFall?.let(hemisphere::toMonthDay),
-      avgFrostFreeDays = if (avgSpring != null && avgFall != null) avgFall - avgSpring - 1 else null,
+      avgLastSpringFrost = springFrosts.averageIndex()?.let(hemisphere::fromReferenceIndex),
+      avgFirstFallFrost = fallFrosts.averageIndex()?.let(hemisphere::fromReferenceIndex),
+      avgFrostFreeDays = frostFreeLengths.takeIf { it.isNotEmpty() }?.average()?.roundToInt(),
       seasonsWithFrost = seasonsWithFrost,
       seasonsAnalysed = seasons.size,
     )
   }
+
+  private fun List<Int>.averageIndex(): Int? = takeIf { it.isNotEmpty() }?.average()?.roundToInt()
 
   private fun coverage(days: List<DailyWeather>, expectedDays: Int, value: (DailyWeather) -> Double?) =
     days.count { value(it) != null }.toDouble() / expectedDays
@@ -142,13 +147,25 @@ object ClimateCalculator {
         .takeWhile { it < seasonStart(season + 1) }
         .count { it.month in growingMonths }
 
-    /** Turns an average "days since season start" back into a date, using a non-leap season. */
-    fun toMonthDay(dayIndex: Int): MonthDay =
-      MonthDay.from(seasonStart(REFERENCE_SEASON).plusDays(dayIndex.toLong()))
+    /**
+     * Position of a date's month and day within the reference season. Averaging these instead of
+     * "days since season start" keeps leap years from shifting dates: Apr 30 is Apr 30 in every
+     * year. Feb 29 is treated as Feb 28.
+     */
+    fun referenceIndex(date: LocalDate): Int {
+      val monthDay = MonthDay.from(date).let { if (it == LEAP_DAY) MonthDay.of(2, 28) else it }
+      val start = seasonStart(REFERENCE_SEASON)
+      val year = if (this == SOUTH && monthDay.month >= Month.JULY) start.year else REFERENCE_SEASON
+      return ChronoUnit.DAYS.between(start, monthDay.atYear(year)).toInt()
+    }
+
+    fun fromReferenceIndex(index: Int): MonthDay =
+      MonthDay.from(seasonStart(REFERENCE_SEASON).plusDays(index.toLong()))
 
     companion object {
       /** Its February (2023) is not a leap month, for both hemispheres. */
       private const val REFERENCE_SEASON = 2023
+      private val LEAP_DAY = MonthDay.of(2, 29)
 
       fun of(latitude: Double) = if (latitude < 0) SOUTH else NORTH
     }

@@ -158,6 +158,54 @@ class ClimateCalculatorTest {
     assertEquals(NoFrost(3), ClimateCalculator.summarize(days, NORTH).frost)
   }
 
+  @Test
+  fun `seasons without frost count in the total but not in the date averages`() {
+    val days =
+      year(2021, MonthDay.of(4, 20), MonthDay.of(10, 5)) +
+        year(2022, lastSpringFrost = null, firstFallFrost = null) +
+        year(2023, MonthDay.of(4, 30), MonthDay.of(10, 15))
+    val frost = ClimateCalculator.summarize(days, NORTH).frost as Frost
+    assertEquals(MonthDay.of(4, 25), frost.avgLastSpringFrost)
+    assertEquals(MonthDay.of(10, 10), frost.avgFirstFallFrost)
+    assertEquals(2, frost.seasonsWithFrost)
+    assertEquals(3, frost.seasonsAnalysed)
+  }
+
+  @Test
+  fun `frost-free length is averaged from each season's own length`() {
+    // Only 2021 has both frosts (Apr 1 → Oct 31: 212 frost-free days). 2022 has only a spring
+    // frost and 2023 only a fall frost. Subtracting the averaged dates (Apr 16 → Oct 16) would
+    // claim ~182 days – a length no season actually had.
+    val days =
+      year(2021, MonthDay.of(4, 1), MonthDay.of(10, 31)) +
+        year(2022, MonthDay.of(4, 30), firstFallFrost = null) +
+        year(2023, lastSpringFrost = null, firstFallFrost = MonthDay.of(9, 30))
+    val frost = ClimateCalculator.summarize(days, NORTH).frost as Frost
+    assertEquals(212, frost.avgFrostFreeDays)
+    assertEquals(3, frost.seasonsWithFrost)
+  }
+
+  @Test
+  fun `leap years do not shift frost dates`() {
+    // Apr 30 is day 121 in a leap year; counting days would turn it into May 1.
+    val days = listOf(2016, 2020, 2024).flatMap { year(it, MonthDay.of(4, 30), MonthDay.of(10, 10)) }
+    val frost = ClimateCalculator.summarize(days, NORTH).frost as Frost
+    assertEquals(MonthDay.of(4, 30), frost.avgLastSpringFrost)
+    assertEquals(MonthDay.of(10, 10), frost.avgFirstFallFrost)
+    assertEquals(162, frost.avgFrostFreeDays) // May 1 .. Oct 9
+  }
+
+  @Test
+  fun `a frost on February 29 is treated as February 28`() {
+    val days =
+      listOf(2016, 2020, 2024).flatMap { y ->
+        year(y, lastSpringFrost = null, firstFallFrost = null).map {
+          if (it.date == LocalDate.of(y, 2, 29)) it.copy(tMinC = -1.0) else it
+        }
+      }
+    assertEquals(MonthDay.of(2, 28), (ClimateCalculator.summarize(days, NORTH).frost as Frost).avgLastSpringFrost)
+  }
+
   // --- Southern hemisphere ----------------------------------------------------------------------
 
   @Test
@@ -183,6 +231,16 @@ class ClimateCalculatorTest {
 
     assertEquals(MonthDay.of(9, 25), frost.avgLastSpringFrost) // Sep 20, Sep 30, Sep 25
     assertEquals(MonthDay.of(5, 20), frost.avgFirstFallFrost) // May 10, May 30, May 20
+  }
+
+  @Test
+  fun `southern seasons that contain a leap day keep their dates`() {
+    // Seasons 2022/23, 2023/24 (contains Feb 29 2024) and 2024/25.
+    val days = (2022..2025).flatMap { southernYear(it) }
+    val frost = ClimateCalculator.summarize(days, SOUTH).frost as Frost
+    assertEquals(MonthDay.of(9, 25), frost.avgLastSpringFrost)
+    assertEquals(MonthDay.of(5, 20), frost.avgFirstFallFrost) // not May 21
+    assertEquals(236, frost.avgFrostFreeDays) // (236 + 237 + 236) / 3, rounded
   }
 
   @Test
