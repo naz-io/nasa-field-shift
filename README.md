@@ -1,5 +1,7 @@
 # Field Shift
 
+[![CI](https://github.com/naz-io/nasa-field-shift/actions/workflows/ci.yml/badge.svg)](https://github.com/naz-io/nasa-field-shift/actions/workflows/ci.yml)
+
 **Compare crop rotations that fit your field's changing climate — using NASA Earth data.**
 
 Field Shift is an Android app that helps farmers explore crop-rotation options for a specific field. It combines NASA climate observations with soil information, crop characteristics and the farmer's own priorities, and explains every suggestion in plain language.
@@ -7,6 +9,19 @@ Field Shift is an Android app that helps farmers explore crop-rotation options f
 > A personal project inspired by the NASA Space Apps Challenge 2026 challenge
 > [Field Shift: Adapting Farms with NASA Data](https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/?tab=details).
 > It is not an official NASA product.
+
+### Available today
+
+Field Shift is an **early prototype**. What works now:
+- **Pick your field** on a Google Map, by searching or by using your location. The app remembers it.
+- **See its historical climate** from NASA POWER, over the last 10 complete years:
+  - average yearly and growing-season precipitation
+  - average last spring frost and first fall frost
+  - the frost-free season, in both hemispheres
+
+Every number says how much data it's based on. When data is too thin, the app says "not enough data" instead of guessing.
+
+**Not built yet:** soil and priority inputs, the crop-rotation comparison, the offline cache, charts and alerts. See the [roadmap](#roadmap). The app shows historical *averages*; it doesn't yet show how the climate is *changing*.
 
 ---
 
@@ -23,7 +38,9 @@ NASA has decades of global Earth observations that describe local growing condit
 
 Field Shift is **global by design**: climate data is available for any point on Earth. Crop knowledge is regional, so it ships in [region packs](#region-packs). **v1 covers Ontario, Canada.**
 
-## How it works
+## How it will work
+
+This is the target design. Steps 1 and 4 work today, in part.
 
 1. **Pick your field** on a map, or use your current location.
 2. **Describe it**:
@@ -83,6 +100,13 @@ Adding a region means adding a pack, not changing the app.
 | SRTM elevation | slope, erosion risk | Planned |
 | SMAP soil moisture, ECOSTRESS, GPM, Landsat, GRACE / GRACE-FO | soil moisture, heat stress, rainfall extremes, long-term water trends | Future (needs a backend for Earthdata access and processing) |
 
+**How the climate numbers are calculated:**
+- **Period:** the last 10 complete years, rolling. A year counts as complete 3 months after it ends, because NASA's data arrives with a lag. In November 2026 that's 2016–2025.
+- **Enough data:** a year counts for a measurement only if at least 95% of its days have a valid value for that measurement. Rain and temperature are checked separately. Small gaps are filled with that year's daily mean.
+- **At least 3 usable years** are needed; otherwise the app shows "not enough data", never 0 mm or "no frost".
+- **Frost:** a frost day is a daily minimum at or below 0 °C at 2 m. The frost-free season is averaged from each season's own length. In the southern hemisphere, seasons run July to June.
+- **Growing season:** the hemisphere's typical months, May–Sep in the north and Nov–Mar in the south. These are defaults, not a crop's actual season.
+
 **Known limit:** POWER's daily minimum temperature is an average over a grid cell about 50 km wide, so it can miss frosts in cold hollows and valleys. Near Clare, South Australia, for example, it shows only one day at or below 0 °C in five years.
 
 *Data source: NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science Program.*
@@ -136,7 +160,8 @@ Current packages, under `app/src/main/kotlin/io/naz/fieldshift/`:
 - `data/ClimateRepository.kt`: maps the API response to domain models
 - `data/FieldRepository.kt`: remembers the last field with DataStore
 - `data/location/`: place search (Geocoder) and device location (Fused Location)
-- `domain/ClimateCalculator.kt`: precipitation, frost dates and the growing season, per hemisphere
+- `domain/ClimateCalculator.kt`: precipitation, frost dates and the growing season, per hemisphere, with data-coverage rules
+- `domain/ClimateRange.kt`: which 10 years to analyse
 - `ui/picker/`: the Google Maps field picker
 - `ui/climate/`: the climate summary screen
 
@@ -144,7 +169,10 @@ Current packages, under `app/src/main/kotlin/io/naz/fieldshift/`:
 
 Requirements:
 - Android Studio (recent stable)
-- JDK 17. Android Studio's bundled JDK works.
+- A JDK to start Gradle: 17 or newer. Android Studio's bundled JDK works.
+  - Gradle downloads its own daemon JDK (JetBrains 25), as set in `gradle/gradle-daemon-jvm.properties`.
+  - Kotlin still compiles the app to Java 17 bytecode (`jvmToolchain(17)`).
+  - So three JDK versions are involved, and you only install one of them.
 - An emulator or device on Android 8.0 (API 26) or newer
 
 ```bash
@@ -154,6 +182,12 @@ Requirements:
 ```bash
 ./gradlew testDebugUnitTest
 ```
+
+```bash
+./gradlew lintDebug
+```
+
+[CI](.github/workflows/ci.yml) runs all three on every push and pull request.
 
 NASA POWER needs no API key. The map needs a **Google Maps API key**:
 
