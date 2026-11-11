@@ -92,6 +92,11 @@ dependencies {
   implementation(libs.retrofit.converter.kotlinx.serialization)
   implementation(libs.kotlinx.serialization.json)
 
+  // Maps, device location, and small key-value storage (the last chosen field)
+  implementation(libs.maps.compose)
+  implementation(libs.play.services.location)
+  implementation(libs.androidx.datastore.preferences)
+
   // Navigation
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
