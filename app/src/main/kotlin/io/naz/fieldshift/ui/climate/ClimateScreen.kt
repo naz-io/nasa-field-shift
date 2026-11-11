@@ -176,7 +176,8 @@ private fun SummaryContent(summary: ClimateSummary, years: YearRange, northern: 
           listOf(
             "Average last spring frost" to frost.avgLastSpringFrost.display(),
             "Average first fall frost" to frost.avgFirstFallFrost.display(),
-            "Frost-free season" to (frost.avgFrostFreeDays?.let { "$it days" } ?: "—"),
+            // Needs a season with both a spring and a fall frost to be measured.
+            "Frost-free season" to (frost.avgFrostFreeDays?.let { "$it days" } ?: "Not measurable"),
           ),
         notes = listOf("Frost in ${frost.seasonsWithFrost} of ${frost.seasonsAnalysed} seasons ($period)."),
       )
@@ -218,7 +219,8 @@ private fun Double.asPercent(): String = "%.1f%%".format(this * 100)
 
 private val MONTH_DAY = DateTimeFormatter.ofPattern("MMM d")
 
-private fun MonthDay?.display(): String = this?.format(MONTH_DAY) ?: "—"
+/** Null means "no such frost in any analysed season" – say so rather than show a bare dash. */
+private fun MonthDay?.display(): String = this?.format(MONTH_DAY) ?: "None observed"
 
 private fun Month.short(): String = getDisplayName(TextStyle.SHORT, Locale.getDefault())
 
