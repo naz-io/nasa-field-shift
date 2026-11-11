@@ -31,7 +31,10 @@ import io.naz.fieldshift.data.PowerClimateRepository
 import io.naz.fieldshift.data.remote.PowerApi
 import io.naz.fieldshift.domain.ClimateSummary
 import io.naz.fieldshift.ui.theme.FieldShiftTheme
+import java.time.Month
 import java.time.MonthDay
+import java.time.format.TextStyle
+import java.util.Locale
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
@@ -108,7 +111,8 @@ private fun SummaryContent(summary: ClimateSummary) {
     rows =
       listOf(
         "Average per year" to "${summary.avgAnnualPrecipMm.roundToInt()} mm",
-        "Growing season (May–Sep)" to "${summary.avgGrowingSeasonPrecipMm.roundToInt()} mm",
+        "Growing season (${summary.growingSeasonFirstMonth.short()}–${summary.growingSeasonLastMonth.short()})" to
+          (summary.avgGrowingSeasonPrecipMm?.let { "${it.roundToInt()} mm" } ?: "—"),
       ),
   )
   StatCard(
@@ -148,6 +152,8 @@ private val MONTH_DAY = DateTimeFormatter.ofPattern("MMM d")
 
 private fun MonthDay?.display(): String = this?.format(MONTH_DAY) ?: "None"
 
+private fun Month.short(): String = getDisplayName(TextStyle.SHORT, Locale.getDefault())
+
 @Preview(showBackground = true)
 @Composable
 private fun ClimateScreenPreview() {
@@ -156,7 +162,17 @@ private fun ClimateScreenPreview() {
       location = DEFAULT_LOCATION,
       uiState =
         ClimateUiState.Success(
-          ClimateSummary(2020, 2024, 850.0, 390.0, MonthDay.of(4, 28), MonthDay.of(10, 20), 174)
+          ClimateSummary(
+            firstYear = 2020,
+            lastYear = 2024,
+            avgAnnualPrecipMm = 850.0,
+            avgGrowingSeasonPrecipMm = 390.0,
+            growingSeasonFirstMonth = Month.MAY,
+            growingSeasonLastMonth = Month.SEPTEMBER,
+            avgLastSpringFrost = MonthDay.of(4, 28),
+            avgFirstFallFrost = MonthDay.of(10, 20),
+            avgFrostFreeDays = 174,
+          )
         ),
       onRetry = {},
     )
