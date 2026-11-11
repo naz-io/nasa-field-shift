@@ -23,6 +23,19 @@ Every number says how much data it's based on. When data is too thin, the app sa
 
 **Not built yet:** soil and priority inputs, the crop-rotation comparison, the offline cache, charts and alerts. See the [roadmap](#roadmap). The app shows historical *averages*; it doesn't yet show how the climate is *changing*.
 
+## The NASA Space Apps challenge
+
+[![Watch the challenge video: Field Shift: Adapting Farms with NASA Data](https://img.youtube.com/vi/cF0U2WXsM7o/maxresdefault.jpg)](https://www.youtube.com/watch?v=cF0U2WXsM7o)
+
+▶ *Click the image to watch NASA's challenge video on YouTube.*
+
+- **Official challenge description:** [Field Shift: Adapting Farms with NASA Data](https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/?tab=details) (NASA Space Apps Challenge 2026)
+- **Challenge resources:** [Resources tab](https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/?tab=resources), opening on 13 November 2026
+
+**In short** (summarised in our own words, not NASA's): the challenge asks for a decision-support tool that combines NASA Earth observations with local soil information, crop traits and the farmer's own priorities. The tool should help farmers explore crop rotations that improve soil health and adapt to changing weather and water conditions. It should compare at least three rotations, including the current one, and explain the evidence, benefits, gaps and risks of each. It should support farmers' judgment, not replace it.
+
+**How Field Shift is designed to answer it:** an Android app that works for any field on Earth, a transparent rule-based comparison of 3 rotations, and region packs for local crop knowledge (Ontario first). Every result says how much data it rests on. The field picker and climate summary exist today; the rotation comparison is being built. See [How it will work](#how-it-will-work) and the [roadmap](#roadmap).
+
 ---
 
 ## The problem
