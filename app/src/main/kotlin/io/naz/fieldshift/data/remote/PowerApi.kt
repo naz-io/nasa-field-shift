@@ -1,4 +1,4 @@
-package com.naz.fieldshift.data.remote
+package io.naz.fieldshift.data.remote
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -57,7 +57,7 @@ interface PowerApi {
 
 /**
  * DTOs ("data transfer objects") mirror the JSON shape exactly. They stay in the data layer;
- * the rest of the app uses the cleaner domain model [com.naz.fieldshift.domain.DailyWeather].
+ * the rest of the app uses the cleaner domain model [io.naz.fieldshift.domain.DailyWeather].
  */
 @Serializable
 data class PowerResponse(

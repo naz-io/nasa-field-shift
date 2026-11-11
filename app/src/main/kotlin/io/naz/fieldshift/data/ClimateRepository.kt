@@ -1,8 +1,8 @@
-package com.naz.fieldshift.data
+package io.naz.fieldshift.data
 
-import com.naz.fieldshift.data.remote.PowerApi
-import com.naz.fieldshift.data.remote.PowerResponse
-import com.naz.fieldshift.domain.DailyWeather
+import io.naz.fieldshift.data.remote.PowerApi
+import io.naz.fieldshift.data.remote.PowerResponse
+import io.naz.fieldshift.domain.DailyWeather
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 

@@ -1,4 +1,4 @@
-package com.naz.fieldshift.domain
+package io.naz.fieldshift.domain
 
 import java.time.LocalDate
 import java.time.Month

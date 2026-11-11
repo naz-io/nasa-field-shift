@@ -1,7 +1,7 @@
-package com.naz.fieldshift.data
+package io.naz.fieldshift.data
 
-import com.naz.fieldshift.data.remote.PowerResponse
-import com.naz.fieldshift.domain.DailyWeather
+import io.naz.fieldshift.data.remote.PowerResponse
+import io.naz.fieldshift.domain.DailyWeather
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Test

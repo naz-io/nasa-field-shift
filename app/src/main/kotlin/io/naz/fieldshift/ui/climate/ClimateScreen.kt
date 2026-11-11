@@ -1,4 +1,4 @@
-package com.naz.fieldshift.ui.climate
+package io.naz.fieldshift.ui.climate
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,11 +26,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.naz.fieldshift.R
-import com.naz.fieldshift.data.PowerClimateRepository
-import com.naz.fieldshift.data.remote.PowerApi
-import com.naz.fieldshift.domain.ClimateSummary
-import com.naz.fieldshift.ui.theme.FieldShiftTheme
+import io.naz.fieldshift.R
+import io.naz.fieldshift.data.PowerClimateRepository
+import io.naz.fieldshift.data.remote.PowerApi
+import io.naz.fieldshift.domain.ClimateSummary
+import io.naz.fieldshift.ui.theme.FieldShiftTheme
 import java.time.MonthDay
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt

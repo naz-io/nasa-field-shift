@@ -1,10 +1,10 @@
-package com.naz.fieldshift
+package io.naz.fieldshift
 
 import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
-import com.naz.fieldshift.ui.climate.ClimateScreen
+import io.naz.fieldshift.ui.climate.ClimateScreen
 
 @Composable
 fun MainNavigation() {

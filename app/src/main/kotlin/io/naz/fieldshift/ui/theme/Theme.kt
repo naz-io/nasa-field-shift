@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.naz.fieldshift.ui.theme
+package io.naz.fieldshift.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

@@ -1,10 +1,10 @@
-package com.naz.fieldshift.ui.climate
+package io.naz.fieldshift.ui.climate
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.naz.fieldshift.data.ClimateRepository
-import com.naz.fieldshift.domain.ClimateCalculator
-import com.naz.fieldshift.domain.ClimateSummary
+import io.naz.fieldshift.data.ClimateRepository
+import io.naz.fieldshift.domain.ClimateCalculator
+import io.naz.fieldshift.domain.ClimateSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

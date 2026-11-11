@@ -1,7 +1,7 @@
-package com.naz.fieldshift.ui.climate
+package io.naz.fieldshift.ui.climate
 
-import com.naz.fieldshift.data.ClimateRepository
-import com.naz.fieldshift.domain.DailyWeather
+import io.naz.fieldshift.data.ClimateRepository
+import io.naz.fieldshift.domain.DailyWeather
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher

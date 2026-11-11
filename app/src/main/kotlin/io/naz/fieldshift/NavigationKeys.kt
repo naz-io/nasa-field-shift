@@ -1,4 +1,4 @@
-package com.naz.fieldshift
+package io.naz.fieldshift
 
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable

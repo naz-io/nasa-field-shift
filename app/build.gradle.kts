@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-  namespace = "com.naz.fieldshift"
+  namespace = "io.naz.fieldshift"
   compileSdk = 37
   defaultConfig {
-    applicationId = "com.naz.fieldshift"
+    applicationId = "io.naz.fieldshift"
     // 26+ so we can use java.time (LocalDate) without core-library desugaring.
     minSdk = 26
     targetSdk = 37

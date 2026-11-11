@@ -1,4 +1,4 @@
-package com.naz.fieldshift
+package io.naz.fieldshift
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.naz.fieldshift.ui.theme.FieldShiftTheme
+import io.naz.fieldshift.ui.theme.FieldShiftTheme
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {

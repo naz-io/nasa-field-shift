@@ -1,4 +1,4 @@
-package com.naz.fieldshift.domain
+package io.naz.fieldshift.domain
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

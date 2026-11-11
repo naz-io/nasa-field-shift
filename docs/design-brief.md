@@ -141,7 +141,7 @@ use NASA POWER data and may lag by a few days. Save button.
 1. Open [Material Theme Builder](https://material-foundation.github.io/material-theme-builder/).
 2. Set the **source / primary colour** to an earthy field green, for example around `#3B6939`. Optionally set a soil-brown secondary and a wheat-gold tertiary.
 3. Check light and dark previews, including the medium- and high-contrast schemes, for outdoor readability.
-4. **Export → Jetpack Compose (Theme.kt)**. This produces the same `Color.kt` / `Theme.kt` format already in `app/src/main/kotlin/com/naz/fieldshift/ui/theme/`.
+4. **Export → Jetpack Compose (Theme.kt)**. This produces the same `Color.kt` / `Theme.kt` format already in `app/src/main/kotlin/io/naz/fieldshift/ui/theme/`.
 5. Share the exported files. Bringing them into the app is a separate, planned step.
 
 ## Who does what

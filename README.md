@@ -126,7 +126,7 @@ data/    Repositories, NASA POWER API client (Retrofit), later Room cache
 
 The UI depends on the repository *interface*, not on Retrofit. This keeps the ViewModel testable with fakes and lets a cache be added behind it without UI changes.
 
-Current packages, under `app/src/main/kotlin/com/naz/fieldshift/`:
+Current packages, under `app/src/main/kotlin/io/naz/fieldshift/`:
 - `data/remote/PowerApi.kt`: the API client and JSON models
 - `data/ClimateRepository.kt`: the repository, which maps the API response to domain models
 - `domain/ClimateCalculator.kt`: precipitation and frost-date statistics
